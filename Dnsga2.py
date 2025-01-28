@@ -34,9 +34,36 @@ class Dnsga_II:
         return (np.any(solution_1 > solution_2) and np.all(solution_1 >= solution_2)) #geq for all values, and exists some value that is strictly greater
 
     def non_dominated_sorting(self, values):
-        dominance_count = np.empty((self.population_size))
+        front_assignments = np.zeros((self.population_size,))
+        front_assignments -= 1
+        dominance_list = np.zeros((self.population_size, self.population_size))
+        for i in range(len(self.population)): #for each objective value, check if it dominates other values
+            # print('testing',self.population[i], values[i])
+            # print(np.all(values[i] >= values, axis = 1))
+            # print(np.any(values[i] > values, axis = 1))
+            # print(np.all(values[i] >= values, axis = 1) & np.any(values[i] > values, axis = 1))
+            dominance_boolean = np.all(values[i] >= values, axis = 1) & np.any(values[i] > values, axis = 1)
+            # dominance_count += dominance_boolean.astype(int) #add 1 to dominance count for each dominated value
+            dominance_list[:,i] += dominance_boolean.astype(int)
+        front_count = 0
+        print('front',front_assignments)
+        while (np.any(front_assignments < 0)):
+            print(dominance_list)
+            dominance_sum = np.sum(dominance_list, axis=1)
+            print(dominance_sum)
+            front_assignments[dominance_sum == 0] = front_count
+            print('sum\n',dominance_sum.astype(bool))
+            dominance_list = np.delete(dominance_list,(dominance_sum == 0), axis=1)
+            dominance_list = np.delete(dominance_list,(dominance_sum == 0), axis=0)
+            print('list\n',dominance_list)
+            front_count+=1
+            print('here')
+                # print(dominance_count)
+            
+        
 
 
     def nsga_ii_discrete(self):
         self.initialize_solutions_discrete()
-        self.evaluate_fitness()
+        objective_values = self.evaluate_fitness()
+        self.non_dominated_sorting(objective_values)
