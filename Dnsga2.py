@@ -46,24 +46,36 @@ class Dnsga_II:
             # dominance_count += dominance_boolean.astype(int) #add 1 to dominance count for each dominated value
             dominance_list[:,i] += dominance_boolean.astype(int)
         front_count = 0
-        print('front',front_assignments)
         while (np.any(front_assignments < 0)):
-            print(dominance_list)
+            # print(dominance_list)
             dominance_sum = np.sum(dominance_list, axis=1)
-            print(dominance_sum)
-            front_assignments[dominance_sum == 0] = front_count
-            print('sum\n',dominance_sum.astype(bool))
-            dominance_list = np.delete(dominance_list,(dominance_sum == 0), axis=1)
-            dominance_list = np.delete(dominance_list,(dominance_sum == 0), axis=0)
-            print('list\n',dominance_list)
+            # print(dominance_sum)
+            solutions_to_add = np.logical_and(dominance_sum == 0, front_assignments == -1)
+            front_assignments[solutions_to_add] = front_count
+            # print('sum\n',dominance_sum.astype(bool))
+            # dominance_list = np.delete(dominance_list,(dominance_sum == 0), axis=1)
+            # dominance_list = np.delete(dominance_list,(dominance_sum == 0), axis=0)
+            # print('list\n',dominance_list)
+            # print(np.expand_dims(solutions_to_add, 1).shape)
+            # print(np.expand_dims(solutions_to_add, 1))
+            trues = np.full((self.population_size,), True)
             front_count+=1
-            print('here')
-                # print(dominance_count)
+            dominance_list[np.ix_(trues, solutions_to_add)] = 0
+            # print('fronts',front_assignments)
+        return front_assignments
             
-        
+    def calculate_crowding_distance(self, values):
+        crowding_distance = np.zeros((self.population_size,))
+        for i in range(len(self.objective_list)):
+            
+            sorted_rows = np.argsort(values[:,i])
+            crowding_distance[[sorted_rows[0], sorted_rows[-1]]] = np.inf
+            print(crowding_distance)
+            print('sorted',sorted_rows)
 
 
     def nsga_ii_discrete(self):
         self.initialize_solutions_discrete()
         objective_values = self.evaluate_fitness()
         self.non_dominated_sorting(objective_values)
+        self.calculate_crowding_distance(objective_values)
