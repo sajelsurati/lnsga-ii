@@ -2,9 +2,10 @@ import numpy as np
 
 
 # TODO: Add constraints
-class Dnsga_II:
+class Dnsga_II_discrete:
 
-    def __init__(self, objective_list, constraints, min_values, max_values, population_size, mutation_percent):
+    def __init__(self, objective_list, constraints, min_values, max_values, population_size=100, mutation_percent=.3, 
+                 dynamic_cutoff=.1, type='a', ):
         self.min_values = min_values
         self.max_values = max_values
         self.objective_list = objective_list
@@ -15,6 +16,7 @@ class Dnsga_II:
         self.constraints = constraints
 
     def fulfills_constraints(self, population):
+        print(population)
         constraint_values = np.full((len(population),), True)
         for constraint in self.constraints:
             fulfills = np.apply_along_axis(constraint, 1, population)
@@ -25,12 +27,14 @@ class Dnsga_II:
     def initialize_solutions_discrete(self):
         self.population = np.empty((self.population_size, self.objective_num))
         fulfills_constraints = np.full((self.population_size,), False)
+        #while the constraints haven't been fulfilled yet
         while (np.any(np.logical_not(fulfills_constraints))):
-            for i in range(len(self.min_values)):
+            for i in range(self.objective_num):
                 #initialize solutions to different values in the given ranges
                 solution_values = np.random.randint(self.min_values[i], self.max_values[i], 
-                                                    (len(np.where(np.logical_not(fulfills_constraints))),))
+                                                    (len(np.where(np.logical_not(fulfills_constraints))[0]),))
                 self.population[np.where(np.logical_not(fulfills_constraints)),i] = solution_values
+            #checks whether constraints are fulfilled
             fulfills_constraints = self.fulfills_constraints(self.population)
         print('population\n',self.population)
 
@@ -104,9 +108,11 @@ class Dnsga_II:
         return(crowding_distance)
 
     def mutation(self, child):
+        mutate = np.random.random((self.objective_num,))
+        fulfills = np.full((self.population_size,), False) # working on this for now.
         for i in range(self.objective_num):
-            mutation = np.random.random()
-            if mutation < self.mutation_percent:
+            if mutate[i] < self.mutation_percent:
+                fulfills = self.fulfills_constraints([child])
                 value = np.random.randint(self.min_values[i], self.max_values[i])
                 child[i] = value
         return child
@@ -181,7 +187,7 @@ class Dnsga_II:
 
     def nsga_ii_discrete(self, num_iterations=100):
         self.initialize_solutions_discrete()
-        for _ in range(num_iterations):
+        for t in range(num_iterations):
             objective_values = self.evaluate_fitness()
             fronts = self.non_dominated_sorting(objective_values)
             crowding_values = self.calculate_crowding_distance(objective_values)
