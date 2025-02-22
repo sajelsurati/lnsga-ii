@@ -5,7 +5,7 @@ import numpy as np
 class Dnsga_II_discrete:
 
     def __init__(self, objective_list, constraints, min_values, max_values, population_size=100, mutation_percent=.3, 
-                 dynamic_cutoff=.1, type='a', ):
+                 dynamic_parent_percent=.1, dynamic_type='a', zeta = .4):
         self.min_values = min_values
         self.max_values = max_values
         self.objective_list = objective_list
@@ -14,17 +14,39 @@ class Dnsga_II_discrete:
         self.generation_num = 0
         self.mutation_percent = mutation_percent
         self.constraints = constraints
+        self.parent_percent = dynamic_parent_percent
+        self.dynamic_type = dynamic_type
 
-    def fulfills_constraints(self, population):
+    def fulfills_constraints(self, population, t):
         print(population)
         constraint_values = np.full((len(population),), True)
         for constraint in self.constraints:
-            fulfills = np.apply_along_axis(constraint, 1, population)
+            fulfills = np.apply_along_axis(constraint, 1, population, t)
             constraint_values = np.logical_and(constraint_values, fulfills)
         print(constraint_values)
         return constraint_values
 
-    def initialize_solutions_discrete(self):
+    def initialize_solutions_discrete(self, recalculate=False):
+        # Means we need to generate new %eta solutions
+        if recalculate:
+            replacement_size = min(1, int(self.population_size*self.parent_percent))
+            replacement_arr = np.random.choice(np.arange(self.population_size), (replacement_size,))
+            if self.dynamic_type == 'a':
+                fulfills_constraints = np.full((replacement_size,), False)
+                new_solutions = np.empty((replacement_size, self.objective_num))
+                while (np.any(np.logical_not(fulfills_constraints))):
+                    for i in range(self.objective_num):
+                        #initialize solutions to different values in the given ranges
+                        solution_values = np.random.randint(self.min_values[i], self.max_values[i], 
+                                                            (len(np.where(np.logical_not(fulfills_constraints))[0]),))
+                        new_solutions[np.where(np.logical_not(fulfills_constraints)),i] = solution_values
+                    #checks whether constraints are fulfilled
+                    fulfills_constraints = self.fulfills_constraints(solution_values, 0)
+            else:
+                new_solutions = self.population[np.random.choice(np.arange(self.population_size), (replacement_size,))]
+            self.population[replacement_arr] = new_solutions
+            return
+
         self.population = np.empty((self.population_size, self.objective_num))
         fulfills_constraints = np.full((self.population_size,), False)
         #while the constraints haven't been fulfilled yet
@@ -35,11 +57,11 @@ class Dnsga_II_discrete:
                                                     (len(np.where(np.logical_not(fulfills_constraints))[0]),))
                 self.population[np.where(np.logical_not(fulfills_constraints)),i] = solution_values
             #checks whether constraints are fulfilled
-            fulfills_constraints = self.fulfills_constraints(self.population)
+            fulfills_constraints = self.fulfills_constraints(self.population, 0)
         print('population\n',self.population)
 
 
-    def evaluate_fitness(self, population=None):
+    def evaluate_fitness(self, t, population=None,):
         if population is None:
             population = self.population
         else:
@@ -49,7 +71,7 @@ class Dnsga_II_discrete:
         #sets each row in the objective_value array to the objective values of the solutions
         for i in range(len( self.objective_list)):
             for j in range(len(population)):
-                objective_values[j,i] = self.objective_list[i](population[j])
+                objective_values[j,i] = self.objective_list[i](population[j], t)
         print('values\n',objective_values)
         return objective_values
 
@@ -107,12 +129,12 @@ class Dnsga_II_discrete:
                 (values[[sorted_rows[-1]],i]-values[[sorted_rows[0]],i]))
         return(crowding_distance)
 
-    def mutation(self, child):
+    def mutation(self, child, t):
         mutate = np.random.random((self.objective_num,))
         fulfills = np.full((self.population_size,), False) # working on this for now.
         for i in range(self.objective_num):
             if mutate[i] < self.mutation_percent:
-                fulfills = self.fulfills_constraints([child])
+                fulfills = self.fulfills_constraints([child], t)
                 value = np.random.randint(self.min_values[i], self.max_values[i])
                 child[i] = value
         return child
@@ -158,20 +180,20 @@ class Dnsga_II_discrete:
         parents_2 = parents[1::2,:]
         return parents_1, parents_2
 
-    def generate_children(self, fronts, crowding):
+    def generate_children(self, fronts, crowding, t):
         #binary tournament phase:
         parents_1, parents_2 = self.binary_tournament(fronts, crowding)
 
         children = np.empty((len(self.population), self.objective_num))
 
         for i in range(len(parents_1)):
-            child = self.mutation(self.crossover(parents_1[i,:], parents_2[i,:]))
+            child = self.mutation(self.crossover(parents_1[i,:], parents_2[i,:]), t)
             children[i,:] = child
         return children
 
 
-    def generate_new_population(self, combined_pop):
-        objective_values = self.evaluate_fitness(combined_pop)
+    def generate_new_population(self, combined_pop, t):
+        objective_values = self.evaluate_fitness(t, combined_pop)
         print(objective_values)
         fronts = self.non_dominated_sorting(objective_values, combined_pop)
         crowding_values = self.calculate_crowding_distance(objective_values, combined_pop)
@@ -184,16 +206,35 @@ class Dnsga_II_discrete:
         print('crowding\n',crowding_values[sort_order])
         self.population = combined_pop[:self.population_size]
 
+    def detect_change(self, t):
+        # choose random solutions to have values tested
+        detection_size = min(1, int(self.population_size*self.parent_percent))
+        detection_arr = self.population[np.random.choice(np.arange(self.population_size), (detection_size,)),:]
+        print('detect',detection_arr)
+        # if past objective values != current, return true
+        objective_values_t = self.evaluate_fitness(t=t, population=detection_arr)
+        objective_values_past_t = self.evaluate_fitness(t=t-1, population=detection_arr)
+        if not np.array_equal(objective_values_t, objective_values_past_t):
+            return True
+        # if past constraint satisfaction != current, return true
+        constraints_t = self.fulfills_constraints(t=t, population=detection_arr)
+        constraints_past_t = self.fulfills_constraints(t=t-1, population=detection_arr)
+        if not np.array_equal(constraints_t, constraints_past_t):
+            return True
+        return False
 
-    def nsga_ii_discrete(self, num_iterations=100):
+    def dnsga_ii_discrete(self, num_iterations=100):
         self.initialize_solutions_discrete()
         for t in range(num_iterations):
-            objective_values = self.evaluate_fitness()
+            if t > 0:
+                if self.detect_change(t):
+                    self.initialize_solutions_discrete(self.population)
+            objective_values = self.evaluate_fitness(t)
             fronts = self.non_dominated_sorting(objective_values)
             crowding_values = self.calculate_crowding_distance(objective_values)
-            children = self.generate_children(fronts, crowding_values)
+            children = self.generate_children(fronts, crowding_values, t)
             combined_population = np.concatenate((children, self.population))
-            self.generate_new_population(combined_population)
+            self.generate_new_population(combined_population, t)
         print('final pop\n',self.population)
-        objective_values = self.evaluate_fitness()
+        objective_values = self.evaluate_fitness(t=num_iterations)
         return self.population 
