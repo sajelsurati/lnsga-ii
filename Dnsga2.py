@@ -16,6 +16,7 @@ class Dnsga_II_discrete:
         self.constraints = constraints
         self.parent_percent = dynamic_parent_percent
         self.dynamic_type = dynamic_type
+        self.zeta = zeta
 
     def fulfills_constraints(self, population, t):
         print(population)
@@ -29,7 +30,7 @@ class Dnsga_II_discrete:
     def initialize_solutions_discrete(self, recalculate=False):
         # Means we need to generate new %eta solutions
         if recalculate:
-            replacement_size = min(1, int(self.population_size*self.parent_percent))
+            replacement_size = min(1, int(self.population_size*self.zeta))
             replacement_arr = np.random.choice(np.arange(self.population_size), (replacement_size,))
             if self.dynamic_type == 'a':
                 fulfills_constraints = np.full((replacement_size,), False)
