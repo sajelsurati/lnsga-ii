@@ -1,7 +1,6 @@
 import numpy as np
 
 
-# TODO: Add constraints
 class Dnsga_II_discrete:
 
     def __init__(self, objective_list, constraints, num_vars, min_values, max_values, population_size=100, mutation_percent=.3, 
@@ -29,7 +28,7 @@ class Dnsga_II_discrete:
             constraint_values = np.logical_and(constraint_values, fulfills)
         return constraint_values
 
-    def initialize_solutions_discrete(self, recalculate=False):
+    def initialize_solutions(self, recalculate=False):
         # Means we need to generate new %eta solutions
         if recalculate:
             replacement_size = min(1, int(self.population_size*self.zeta))
@@ -230,7 +229,6 @@ class Dnsga_II_discrete:
         objective_values_t = self.evaluate_fitness(t=t, population=detection_arr)
         objective_values_past_t = self.evaluate_fitness(t = 1/self.nt*((gen-1)//self.tau_t), population=detection_arr)
         diff = (objective_values_t - objective_values_past_t)**2
-        print('detection mean:',np.abs(diff/objective_values_past_t).mean())
         if np.abs(diff/objective_values_past_t).mean() > self.detection_cutoff:
             return True
         # if past constraint satisfaction != current, return true
@@ -241,8 +239,9 @@ class Dnsga_II_discrete:
         return False
 
     def dnsga_ii_discrete(self, num_iterations=100):
-        self.initialize_solutions_discrete()
+        self.initialize_solutions()
         values = []
+        solutions = []
         for gen in range(num_iterations):
             t = 1/self.nt * np.floor(gen/self.tau_t)
             if gen > 0:
@@ -251,17 +250,20 @@ class Dnsga_II_discrete:
                 #     values.append(self.evaluate_fitness(1/self.nt * np.floor((gen-1)/self.tau_t)))
                 if self.detect_change(gen):
                     print('detecting!')
-                    self.initialize_solutions_discrete(recalculate=True)
                     values.append(self.evaluate_fitness(1/self.nt * np.floor((gen-1)/self.tau_t)))
+                    solutions.append(self.population)
+                    self.initialize_solutions(recalculate=True)
             objective_values = self.evaluate_fitness(t)
             fronts = self.non_dominated_sorting(objective_values)
             crowding_values = self.calculate_crowding_distance(objective_values)
             print('children')
             children = self.generate_children(fronts, crowding_values, t)
             combined_population = np.concatenate((children, self.population))
+            print('combined pop\n',combined_population)
             self.generate_new_population(combined_population, t)
         # print('final pop\n',self.population)
         objective_values = self.evaluate_fitness(t=num_iterations)
         values.append(objective_values)
+        solutions.append(self.population)
         # return self.population
-        return values
+        return values, solutions
