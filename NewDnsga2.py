@@ -7,7 +7,7 @@ class New_Dnsga2:
     # def pt is the number of solutions propogated forward
     def __init__(self, objective_list, constraints, num_vars, min_values, max_values, previous_solution, population_size=100, mutation_percent=.3, 
                  dynamic_parent_percent=.1, dynamic_type='a', zeta = .4, detection_cutoff = 0, nt = 10, tau_t = 5,
-                 pt = 5, beginning_lookback = 0):
+                 pt = 5, beginning_lookback = 0, normalize = True):
         self.min_values = min_values
         self.max_values = max_values
         self.objective_list = objective_list
@@ -24,6 +24,7 @@ class New_Dnsga2:
         self.nt = nt
         self.tau_t = tau_t
         self.pt = pt
+        self.normalize = normalize
         self.prev_sol = previous_solution
 
         self.solutions = [] #list of solution objects
@@ -68,19 +69,19 @@ class New_Dnsga2:
                         solution_values = np.random.uniform(self.min_values[i], self.max_values[i], 
                                                             (len(np.where(np.logical_not(fulfills_constraints))[0]),))
                         #below is just for integers
-                        # solution_values = np.random.randint(self.min_values[i], self.max_values[i], 
-                        #                                     (len(np.where(np.logical_not(fulfills_constraints))[0]),))
                         new_solutions[np.where(np.logical_not(fulfills_constraints)),i] = solution_values
                     #checks whether constraints are fulfilled
                     fulfills_constraints = self.fulfills_constraints(solution_values, 0)
+                    if self.normalize:
+                        new_solutions = new_solutions/new_solutions.sum(axis=1)
+                        
             else:
                 new_solutions = self.population[np.random.choice(np.arange(self.population_size), (replacement_size,))]
+                if self.normalize:
+                    new_solutions = new_solutions/new_solutions.sum(axis=1)
             self.population[replacement_arr] = new_solutions
             for i in range(self.population_size):
                 self.solutions[i].solution_dict[t] = self.population[i,:]
-            # print('solutions in initialize')
-            # for i in range(self.population_size):
-            #     print(self.solutions[i].solution_dict)
             return
 
         self.population = np.empty((self.population_size, self.num_vars))
@@ -92,17 +93,15 @@ class New_Dnsga2:
 
                 solution_values = np.random.uniform(self.min_values[i], self.max_values[i], 
                                                             (len(np.where(np.logical_not(fulfills_constraints))[0]),))
-                
-                # solution_values = np.random.randint(self.min_values[i], self.max_values[i], 
-                #                                     (len(np.where(np.logical_not(fulfills_constraints))[0]),))
                 self.population[np.where(np.logical_not(fulfills_constraints)),i] = solution_values
             #checks whether constraints are fulfilled
             fulfills_constraints = self.fulfills_constraints(self.population, 0)
+        print(self.population)
+        self.population = self.population/np.expand_dims(self.population.sum(axis=1), axis=1)
+        print(self.population)
         for i in range(self.population_size):
             self.solutions[i].solution_dict[t] = self.population[i,:]
-        # print('solutions in initialize')
-        # for i in range(self.population_size):
-        #     print(self.solutions[i].solution_dict)
+
         return
 
     def evaluate_fitness(self, t, population=None, solutions=None):
@@ -113,24 +112,13 @@ class New_Dnsga2:
             population = population
             solutions = solutions
         objective_values = np.empty((len(population), self.objective_num))
-        
-        # print('total solutions\n')
-        # for i in range(len( population)):
-        #     print(solutions[i].solution_dict)
 
         #sets each row in the objective_value array to the objective values of the solutions
         for i in range(len( self.objective_list)):
             for j in range(len(population)):
-                # print(round(t-1/self.nt,5))
-                # print(solutions[j].solution_dict)
                 objective_values[j,i] = self.objective_list[i](solutions[j].solution_dict[t],
                                                                 t, solutions[j].solution_dict[round(t-1/self.nt,5)])
-                
-        # if np.any(np.isinf(objective_values)):
-            # print('is INF in fitness')
-            # print(objective_values)
-            # print(population)
-            # print(solutions)
+                print(objective_values[j,i], 'for solution',population[j])
         return objective_values
 
     def non_dominated_sorting(self, values, population=None):
@@ -179,14 +167,8 @@ class New_Dnsga2:
             #sort by ith objective values
             sorted_rows = np.argsort(values[:,i])
             #boundary solutions have an infinite distance (least crowded)
-            # print(values[[sorted_rows[-1]],i], values[[sorted_rows[0]],i])
-            # print(population[[sorted_rows[-1]]], population[[sorted_rows[0]]])
             if (values[[sorted_rows[0]],i] == values[[sorted_rows[-1]],i]):
                 crowding_distance[sorted_rows] += 0
-            # if values[[sorted_rows[0]],i] == np.inf or values[[sorted_rows[-1]],i] == np.inf:
-                # print('crowding',values[[sorted_rows[-1]],i],values[[sorted_rows[0]],i])
-                # print(population[sorted_rows[0]], population[sorted_rows[-1]])
-                # print(self.solutions[sorted_rows[0]].solution_dict, self.solutions[sorted_rows[-1]].solution_dict)
             #non-boundary solutions have crowding value based on equation given in paper
             else:
                 crowding_distance[[sorted_rows[0], sorted_rows[-1]]] = np.inf
@@ -243,13 +225,6 @@ class New_Dnsga2:
         solutions[np.where(binary_2_smaller)] = self.solutions[binary_2[np.where(binary_2_smaller)]]
         solutions[np.where(binary_1_crowding)] = self.solutions[binary_1[np.where(binary_1_crowding)]]
         solutions[np.where(binary_2_crowding)] = self.solutions[binary_2[np.where(binary_2_crowding)]]
-        
-        # if not(np.all(solutions)):
-        #     print(np.concatenate((np.where(binary_1_smaller), np.where(binary_2_smaller),np.where(binary_1_crowding),np.where(binary_2_crowding)), axis=None))
-        #     print(fronts[binary_1])
-        #     print(fronts[binary_2])
-        #     print(crowding[binary_1])
-        #     print(crowding[binary_2])
 
         #setting odd rows as parent 1 and even rows as parent 2
         parents_1 = parents[::2,:]
@@ -272,26 +247,19 @@ class New_Dnsga2:
 
     def generate_children(self, fronts, crowding, t):
         #binary tournament phase:
-        # print('beforeCross\n',self.population)
         parents_1, parents_2, sols_1, sols_2 = self.binary_tournament(fronts, crowding)
-        # print('PARENTS')
-        # print(parents_1,'\n')
-        # print(parents_2)
-        # print(len(parents_1),len(parents_2), len(sols_1), len(sols_2))
-        # for i in range(len(sols_1)):
-        #     print('sols1',sols_1[i].solution_dict)
-        
-        # for i in range(len(sols_2)):
-        #     print('sols2',sols_2[i].solution_dict)
         children = np.empty((len(self.population), self.num_vars))
         solutions = np.ndarray((self.population_size,), Solution)
         for i in range(len(parents_1)):
             child = self.mutation(self.crossover(parents_1[i,:], parents_2[i,:]), t)
-            # print(sols_1[i].solution_dict, sols_2[i].solution_dict)
+            if self.normalize:
+                child = child/child.sum()
             child_sol = self.solution_crossover(sols_1[i], sols_2[i], t)
             child_sol.solution_dict[t] = child
             while (np.any(np.all(self.population == child, axis=1))):
                 child = self.mutation(self.crossover(parents_1[i,:], parents_2[i,:]), t)
+                if self.normalize:
+                    child = child/child.sum()
                 child_sol.solution_dict[t] = child
             children[i,:] = child
             solutions[i] = child_sol
@@ -307,13 +275,6 @@ class New_Dnsga2:
         combined_sols = combined_sols[sort_order]
         self.solutions = combined_sols[:self.population_size]
         self.population = combined_pop[:self.population_size]
-
-        # if np.any(np.isinf(self.population)):
-        #     print('in pop gen')
-        #     print(self.population)
-
-        # for i in range(self.population_size):
-        #     self.solutions[i].solution_dict[t] = self.population[i,:]
 
     def select_propogate_values(self, t, solutions, population, last_iteration = False):
         objective_values = self.evaluate_fitness(t, population=population, solutions=solutions)
@@ -331,69 +292,26 @@ class New_Dnsga2:
         
         if last_iteration:
             return solutions[sort_order][:self.population_size]
-        # return population[sort_order][:self.pt], solutions[sort_order][:self.pt]
 
         return solutions[sort_order][:self.pt]
-
-
-
-    # def detect_change(self, gen):
-    #     t = 1/self.nt*(gen//self.tau_t)
-    #     # choose random solutions to have values tested
-    #     detection_size = min(1, int(self.population_size*self.parent_percent))
-    #     detection_arr = self.population[np.random.choice(np.arange(self.population_size), (detection_size,)),:]
-    #     # if past objective values != current, return true
-    #     objective_values_t = self.evaluate_fitness(t=t, population=detection_arr)
-    #     objective_values_past_t = self.evaluate_fitness(t = 1/self.nt*((gen-1)//self.tau_t), population=detection_arr)
-    #     diff = (objective_values_t - objective_values_past_t)**2
-    #     print('detection mean:',np.abs(diff/objective_values_past_t).mean())
-    #     if np.abs(diff/objective_values_past_t).mean() > self.detection_cutoff:
-    #         return True
-    #     # if past constraint satisfaction != current, return true
-    #     constraints_t = self.fulfills_constraints(t=t, population=detection_arr)
-    #     constraints_past_t = self.fulfills_constraints(t=t-1, population=detection_arr)
-    #     if not np.array_equal(constraints_t, constraints_past_t):
-    #         return True
-    #     return False
     
     def generation_step(self, t):
         # get objective values
         objective_values = self.evaluate_fitness(t)
         # assign fronts and crowding values
         fronts = self.non_dominated_sorting(objective_values)
-        # if np.any(np.isinf(self.population)):
-        #     print('in gen step BEFORE MAKING CHILDREN')
-        #     print(self.population)
         crowding_values = self.calculate_crowding_distance(objective_values)
         # generate children
         children, child_sols = self.generate_children(fronts, crowding_values, t)
-        # if np.any(np.isinf(children)):
-        #     print('in gen step AFTER MAKING CHILDREN')
-        #     print(children)
         combined_population = np.concatenate((children, self.population))
-        # if np.any(np.isinf(combined_population)):
-        #     print('in gen step')
-        #     print(self.population)
         combined_sols = np.concatenate((child_sols, self.solutions))
         # generate new population by taking top solutions
         self.generate_new_population(combined_population, combined_sols, t)
 
-
-
-    # def modify_next_t(self, t, previous_solution):
-    #     # change previous t to the previous solution
-    #     self.initialize_solutions(t=t,previous_solution=previous_solution, keep_solutions=True)
-
-
-
     def original_iteration(self, t):
         for i in range(self.tau_t):
-            # print(i)
             self.generation_step(t)
         propogate_solutions = self.select_propogate_values(t=t, solutions=self.solutions, population=self.population)
-        # print('top solutions for',0)
-        # for i in range(len(propogate_solutions)):
-        #     print(propogate_solutions[i].solution_dict)
 
         return propogate_solutions
     
@@ -404,9 +322,6 @@ class New_Dnsga2:
             top_solutions[i].solution_dict = foo.solution_dict.copy()
         
         original_population = self.population.copy()
-        # if np.any(np.isinf(original_population)):
-            # print('future at beginning')
-            # print(self.population)
         total_solutions = np.ndarray((self.pt*self.population_size,), 
                                      Solution)
         total_population = np.ndarray((self.pt*self.population_size,self.num_vars))
@@ -417,56 +332,24 @@ class New_Dnsga2:
         
         #For each propogated solution
         for i in range(len(top_solutions)):
-            # print('for solution:',top_solutions[i].solution_dict)
-            # print('at round',round(t-1/self.nt,5), )
-            # print('round',round(t-1/self.nt,5),top_solutions[i].solution_dict[round(t-1/self.nt,5)])
-            # print('top solutions for',t)
-            # for j in range(len(top_solutions)):
-            #     print(top_solutions[j].solution_dict)
             self.population = original_population
-            # print('in loop\n',self.population)
-            # print('original\n',self.population)
             self.solutions = self.solutions.copy()
             self.initialize_solutions(t=t,previous_solution=top_solutions[i].solution_dict.copy(), 
                                       keep_solutions=True)
             for j in range(self.tau_t):
-                # if np.any(np.isinf(self.population)):
-                #     print('future in INNER LOOP')
-                #     print(self.population)
-                # print('in generation\n',self.population)
                 self.generation_step(t)
-                # print('POPULATION\n')
-                # print(self.population)
-                # print('\n')
-            # print('solutions for',i)
 
-            # total_solutions[i*self.population_size:(i+1)*self.population_size] = self.solutions
             for j in range(len(self.solutions)):
-                # print(self.solutions[j].solution_dict)
                 foo = copy.copy(self.solutions[j])
                 total_solutions[i*self.population_size+j] = Solution()
                 total_solutions[i*self.population_size+j].solution_dict = foo.solution_dict.copy()
         for i in range(self.pt*self.population_size):
             total_population[i] = total_solutions[i].solution_dict[t]
-        # print('all solutions')
-        # for k in range(len(total_population)):
-        #     print(total_solutions[k].solution_dict)
-        # if np.any(np.isinf(total_population)):
-        #     print('in future')
-        #     print(total_population)
         total_obj_values = self.evaluate_fitness(t, population=total_population, solutions=total_solutions)
         if last_iteration:
             return self.select_propogate_values(t=t, solutions=total_solutions,population=total_population,
                                                                        last_iteration=last_iteration)
-        # print('total solutions for t',t,'\n')
-        # for i in range(len(total_solutions)):
-        #     print(total_solutions[i].solution_dict)
-        # print('prop_pop\n',total_population)
         propogate_solutions = self.select_propogate_values(t=t, solutions=total_solutions, population=total_population)
-        # print('from future iteration:',t)
-        # for i in range(len(propogate_solutions)):
-        #     print(propogate_solutions[i].solution_dict)     
-  
             
         return propogate_solutions
 
@@ -475,33 +358,21 @@ class New_Dnsga2:
         propogation_sols = self.original_iteration(t=0.0)
         for step in range(1, self.nt): # because there will be nt-1 iterations (not including the 1st iteration)
             t = round(1/self.nt * step,5)
-            print(t)
-            # values.append(self.evaluate_fitness(1/self.nt*(step-1)))
+            print('time',t)
             self.initialize_solutions(recalculate=True, t=t)
-            # print('population')
-            # print(self.population)
-            # print('t and gen', t, int(t*self.nt*self.tau_t))
-            # if step == self.nt - 1:
-            #     self.solutions = self.future_iteration(t, propogation_sols, last_iteration=True)
             propogation_sols = self.future_iteration(t, propogation_sols)
         for i in range(len(propogation_sols)):
             propogation_sols[i].solution_dict[round(-1/self.nt,5)] = self.solutions[i].solution_dict[round(1-1/self.nt,5)]
         for loop in range(1, num_loops):
-            # print(loop)
-            # for i in range(self.population_size):
-            #     print(self.solutions[i].solution_dict)
             for step in range(self.nt): # because there will be nt-1 iterations (not including the 1st iteration)
                 t = round(1/self.nt * step,5)
                 print('time',t)
-                # values.append(self.evaluate_fitness(1/self.nt*(step-1)))
                 self.initialize_solutions(recalculate=True, t=t)
-                # print('t and gen', t, int(t*self.nt*self.tau_t))
                 if step == self.nt - 1 and loop == num_loops-1:
                     self.solutions = self.future_iteration(t, propogation_sols, last_iteration=True)
                 propogation_sols = self.future_iteration(t, propogation_sols)
             for i in range(len(propogation_sols)):
                 propogation_sols[i].solution_dict[round(-1/self.nt,5)] = self.solutions[i].solution_dict[round(1-1/self.nt,5)]
-            # print(self.solutions)
         values = []
         for step in range(self.nt):
             t = round(1/self.nt * step,5)

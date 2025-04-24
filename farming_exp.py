@@ -22,12 +22,14 @@ def calculate_cost(x_now, x_past):
         sys.exit()
     acres_per_crop = x_now*NUM_ACRES
     cost_alphas = [0, 1.7, 1.3]
-    yields = np.array([48.25, 68, 69.1])
+    yields = np.array([30, 30, 30])
+    # yields = np.array([48.25, 68, 69.1])
+
     # if x_past[0] > 0:
     #     cost_npc = [0, 20, 20] # don't need to add anything to soybeans because 
     total = (cost_alphas*acres_per_crop).dot(yields.T)
     total = total - 20*x_past[0]*NUM_ACRES
-    return total
+    return total*.659 # multiply total fertilizer needed by price
 
 def crop_profit(x_now, t, x_past):
     # print(x_now,t)
@@ -45,7 +47,7 @@ def crop_profit(x_now, t, x_past):
 
 dnsga = New_Dnsga2(objective_list=[crop_profit], constraints=[], 
                  num_vars=3, min_values=([0]*3), max_values=([1]*3), population_size=100, mutation_percent= .4, tau_t=50,
-                 previous_solution=[0,0, 1], pt=5, nt=4)
+                 previous_solution=[0,1,0], pt=5, nt=4)
 values_1, solutions_1 = dnsga.run_newdnsga2(num_loops = 10)
 for val in values_1:
     plt.scatter(val[:,0], val[:,1])
