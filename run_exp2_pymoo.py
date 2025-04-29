@@ -49,7 +49,12 @@ def crop_profit(x_now, x_past):
     barley_price = np.mean(barley_prices)*68*x_now[1]*NUM_ACRES
     oat_price = np.mean(oat_prices)*69.1*x_now[2]*NUM_ACRES
     total = soy_price+barley_price+oat_price - calculate_cost(x_now, x_past)
-    return total
+    return -total
+
+def shannon_entropy(x_now):
+    log = np.log(x_now)
+    px = x_now*log
+    return np.sum(px)
 
 # def f0(x):
 #     profit = crop_profit(x[0:3], [0,0,1])
@@ -83,16 +88,20 @@ class MyProblem(ElementwiseProblem):
                         #  xu=np.array([1, 1, 1])
     def __init__(self):
         super().__init__( n_var=12,
-                         n_obj=4,
+                         n_obj=2,
                          n_eq_constr=4,
                          xl=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
                          xu=np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]))
 
     def _evaluate(self, x, out, *args, **kwargs):
         f0 = crop_profit(x[0:3], [0,0,1])
-        f1 = profit = crop_profit(x[3:6], x[0:3])
-        f2 = profit = crop_profit(x[6:9], x[3:6])
-        f3 = profit = crop_profit(x[9:12], x[6:9])
+        f1 = crop_profit(x[3:6], x[0:3])
+        f2 = crop_profit(x[6:9], x[3:6])
+        f3 = crop_profit(x[9:12], x[6:9])
+        f4 = shannon_entropy(x[0:3])
+        f5 = shannon_entropy(x[3:6])
+        f6 = shannon_entropy(x[6:9])
+        f7 = shannon_entropy(x[9:12])
 
         h0 = 1 - np.sum(x[0:3])
         h1 = 1 - np.sum(x[3:6])
@@ -105,7 +114,7 @@ class MyProblem(ElementwiseProblem):
         # out["F"] = [f0]
         # out["H"] = [h0]
 
-        out["F"] = [f0, f1, f2, f3]
+        out["F"] = [f0 + f1 + f2 +f3, f4 + f5 + f6 + f7]
         out["H"] = [h0, h1, h2, h3]
 
 # class MyProblem2(ElementwiseProblem):
@@ -130,9 +139,30 @@ class MyProblem(ElementwiseProblem):
 #         out["F"] = [f1, f2]
 #         out["G"] = [g1, g2]
 
+# problem1 = MyProblem()
+
+
+# algorithm1 = NSGA2(
+#     pop_size=100,
+#     # n_offsprings=10,
+#     # sampling=FloatRandomSampling(),
+#     # crossover=SBX(prob=0.9, eta=15),
+#     # mutation=PM(eta=20),
+#     eliminate_duplicates=True
+# )
+
+# res1 = minimize(problem1,
+#                algorithm1,
+#                termination=('n_gen', 100),
+               
+#                verbose=True)
+
+# res2 = minimize(problem2,
+#                algorithm2,
+#                termination=('n_gen', 100),
+#                seed=1,
+#                verbose=True)
 problem1 = MyProblem()
-
-
 algorithm1 = NSGA2(
     pop_size=100,
     # n_offsprings=10,
@@ -143,20 +173,35 @@ algorithm1 = NSGA2(
 )
 
 res1 = minimize(problem1,
+            algorithm1,
+            termination=('n_gen', 400),
+            verbose=False)
+
+results = res1.X
+
+for _ in range(9):
+    problem1 = MyProblem()
+    algorithm1 = NSGA2(
+        pop_size=100,
+        # n_offsprings=10,
+        # sampling=FloatRandomSampling(),
+        # crossover=SBX(prob=0.9, eta=15),
+        # mutation=PM(eta=20),
+        eliminate_duplicates=True
+    )
+
+    res1 = minimize(problem1,
                algorithm1,
-               termination=('n_gen', 100),
-               
-               verbose=True)
-
-# res2 = minimize(problem2,
-#                algorithm2,
-#                termination=('n_gen', 100),
-#                seed=1,
-#                verbose=True)
-
-
-X1 = res1.X
-F1 = res1.F
+               termination=('n_gen', 400),
+               verbose=False)
+    
+    X1 = res1.X
+    F1 = res1.F
+    results = np.concatenate((results, X1))
+    print(results)
+print(np.array(results).shape)
+print('stddev\n',np.std(results, axis=0))
+print('mean\n',np.mean(results, axis=0))
 
 # X2 = res2.X
 # F2 = res2.F
@@ -172,7 +217,8 @@ all_found = []
 # print(X2)
 # print(X2[0])
 print(X1)
-print(X1[0])
+for i in range(len(X1)):
+    print(X1[i,:])
 # for i in range(len(X1)):
 #     found = False
 #     for j in range(len(X2)):

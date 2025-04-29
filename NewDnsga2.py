@@ -1,6 +1,7 @@
 import numpy as np
 from Solution import Solution
 import copy
+import time
 
 class New_Dnsga2:
 
@@ -96,9 +97,7 @@ class New_Dnsga2:
                 self.population[np.where(np.logical_not(fulfills_constraints)),i] = solution_values
             #checks whether constraints are fulfilled
             fulfills_constraints = self.fulfills_constraints(self.population, 0)
-        print(self.population)
         self.population = self.population/np.expand_dims(self.population.sum(axis=1), axis=1)
-        print(self.population)
         for i in range(self.population_size):
             self.solutions[i].solution_dict[t] = self.population[i,:]
 
@@ -117,8 +116,7 @@ class New_Dnsga2:
         for i in range(len( self.objective_list)):
             for j in range(len(population)):
                 objective_values[j,i] = self.objective_list[i](solutions[j].solution_dict[t],
-                                                                t, solutions[j].solution_dict[round(t-1/self.nt,5)])
-                print(objective_values[j,i], 'for solution',population[j])
+                                                                solutions[j].solution_dict[round(t-1/self.nt,5)])
         return objective_values
 
     def non_dominated_sorting(self, values, population=None):
@@ -310,7 +308,10 @@ class New_Dnsga2:
 
     def original_iteration(self, t):
         for i in range(self.tau_t):
+            print('generation',i)
             self.generation_step(t)
+            # time.sleep(.3)
+            
         propogate_solutions = self.select_propogate_values(t=t, solutions=self.solutions, population=self.population)
 
         return propogate_solutions
@@ -352,6 +353,30 @@ class New_Dnsga2:
         propogate_solutions = self.select_propogate_values(t=t, solutions=total_solutions, population=total_population)
             
         return propogate_solutions
+    
+    def test_convergence(self):
+        possible_sols = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+        random_sols = np.random.randint(low=0, high=len(self.solutions),size=(10,))
+        convergences = []
+        for sol in random_sols:
+            converge = True
+            for pos in possible_sols:
+                for t in range(self.nt):
+                    obj_vals = []
+                    for obj in self.objective_list:
+                        val1 = obj(self.solutions[sol].solution_dict[round(t/self.nt, 5)], 
+                                   self.solutions[sol].solution_dict[round((t-1)/self.nt)])
+                        val2 = obj(pos, self.solutions[sol].solution_dict[round((t-1)/self.nt, 5)])
+                        if (val1 - val2)/abs(val2) > .1:
+                            converge = False
+            convergences.append(converge)
+        conv_values, conv_counts = np.unique(convergences, return_counts=True)
+        print(conv_values, '\n',conv_counts)
+        if conv_values[np.argmax(conv_counts)]:
+            return True
+        return False
+                            
+                
 
     def run_newdnsga2(self, num_loops):
         self.initialize_solutions(previous_solution=self.prev_sol)
@@ -363,6 +388,7 @@ class New_Dnsga2:
             propogation_sols = self.future_iteration(t, propogation_sols)
         for i in range(len(propogation_sols)):
             propogation_sols[i].solution_dict[round(-1/self.nt,5)] = self.solutions[i].solution_dict[round(1-1/self.nt,5)]
+        self.test_convergence()
         for loop in range(1, num_loops):
             for step in range(self.nt): # because there will be nt-1 iterations (not including the 1st iteration)
                 t = round(1/self.nt * step,5)
@@ -373,12 +399,13 @@ class New_Dnsga2:
                 propogation_sols = self.future_iteration(t, propogation_sols)
             for i in range(len(propogation_sols)):
                 propogation_sols[i].solution_dict[round(-1/self.nt,5)] = self.solutions[i].solution_dict[round(1-1/self.nt,5)]
+            self.test_convergence()
         values = []
         for step in range(self.nt):
             t = round(1/self.nt * step,5)
             for i in range(self.population_size):
                 self.population[i] = self.solutions[i].solution_dict[t]
-                self.solutions[i].solution_dict.pop(self.solutions[i].solution_dict[round(-1/self.nt,5)], None)
+                # self.solutions[i].solution_dict.pop(self.solutions[i].solution_dict[round(-1/self.nt,5)], None)
             obj_vals = self.evaluate_fitness(t=t)
             values.append(obj_vals)
         return values, self.solutions
