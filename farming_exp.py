@@ -2,7 +2,6 @@ import numpy as np
 from NewDnsga2 import New_Dnsga2
 import matplotlib.pyplot as plt
 import sys
-from Solution import Solution
 
 def calculate_cost(x_now, x_past):
     # x0 is beans x1 is malting barley x2 is oat
